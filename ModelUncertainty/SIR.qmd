@@ -230,13 +230,14 @@ box(bty = "o")
 ```
 
 ```{r}
+# Predicted vs Observed, good for model validation
 model_fit(beta = beta_hat, gamma = gamma_hat, flu, pch = 19, col = "red", ylim = c(0, 600))
 ```
 
 ## Monte Carlo simulation
 
 ```{r}
-# num of MC samples
+# number of MC samples
 niter = 1000
 
 # draw from normal distributions
@@ -278,6 +279,19 @@ plot(mc_sample)
 cor(mc_sample)
 ```
 
+## Visualization of predictions with uncertainty
+
+```{r}
+for (i in 1:10) {
+  predictions <- sir_1(beta = beta_sample[i], gamma = gamma_sample[i], S0 = N - 1, I0 = 1, R0 = 0, times = flu$day)
+
+  if(i == 1) {
+    plot(I~time, data = predictions, type = "l")
+  } else {
+    lines(I~time, data = predictions)
+  }
+}
+```
 
 
 
