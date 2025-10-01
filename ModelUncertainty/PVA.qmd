@@ -1,0 +1,107 @@
+---
+title: "PopulationViabilityAnalysis"
+author: "Ruowen Xiao"
+format: html
+editor: visual
+---
+
+## Introduction
+
+Equation:
+
+$$
+B_t = B_{t-1} \cdot e^{π - δ \cdot B_{t-1} + S_t} - C_t
+$$
+
+-   $B_t$: Biomass at time t
+-   $C_t$: Catch at time t
+-   $S_t$: $S_t \sim N(0, σ)$ natural variability due to weather and climate
+-   π: intrinsic growth rate
+-   δ: density depends
+
+1. Extinction probability given value on π, δ, σ and $B_0$ and C
+2. Derive likelihood at extinction over 3 generations(quasi-extinction threshold)
+3. *Conclude the in probability
+
+## Modeling
+
+```{r}
+# parameters
+p = 0.5
+delta = 0.002
+sigma = 0.25
+
+# input variables
+B0 = 250
+C = 22
+GL = 30
+time = 0:GL
+qext = 10
+```
+
+```{r}
+B = rep(0, GL+1)
+B[1] = B0
+for (t in 1:GL) {
+  # equation of Biomass
+  B[t+1] <- B[t] * exp(p - delta * B[t] + rnorm(1, 0, sigma)) - C
+  B[t+1] = max(0, B[t+1])
+}
+```
+
+```{r}
+plot(time, B, ylab = "biomass", type = "l", ylim = c(0,500))
+abline(h = qext, col = "darkred")
+```
+
+```{r}
+# model multiple times
+niter = 100
+below = rep(0, niter) # counter of quasi-extinction
+
+for (i in 1:niter) {
+  for (t in 1:GL) {
+    # equation of Biomass
+    B[t+1] <- B[t] * exp(p - delta * B[t] + rnorm(1, 0, sigma)) - C
+    B[t+1] = max(0, B[t+1])
+  }
+  below[i] = max(B < qext)
+  if(i == 1) {
+    plot(time, B, ylab = "biomass", type = "l", ylim = c(0,500))
+  } else {
+    lines(time, B)
+  }
+}
+abline(h = qext, col = "darkred")
+
+quasi_extinction_risk = mean(below)
+```
+
+```{r}
+quasi_extinction_risk
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
