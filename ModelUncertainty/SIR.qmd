@@ -1,0 +1,305 @@
+---
+title: "Model uncertainty"
+---
+
+https://rpubs.com/choisy/sir
+
+𝑆: susceptibles
+
+𝐼: infectious
+
+𝑅: recovered
+
+$$
+S \xrightarrow{𝛽 \times𝐼} I \xrightarrow{𝛾} R
+$$
+
+> variable: number changing over time
+>
+> parameter: fixed number
+
+```{r}
+# install.packages("deSolve")
+```
+
+```{r}
+library(deSolve) # using the "ode" function
+```
+
+```{r}
+# create a function
+sir_equations <- function(time, variables, parameters) {
+  with(as.list(c(variables, parameters)), {
+    dS <- -beta * I * S
+    dI <-  beta * I * S - gamma * I
+    dR <-  gamma * I
+    return(list(c(dS, dI, dR)))
+  })
+}
+```
+
+```{r}
+# create a vector of parameters
+parameters_values <- c(
+  beta  = 0.004, # infectious contact rate (/person/day)
+  gamma = 0.5    # recovery rate (/day)
+)
+```
+
+```{r}
+initial_values <- c(
+  S = 999,  # number of susceptibles at time = 0
+  I =   1,  # number of infectious at time = 0
+  R =   0   # number of recovered (and immune) at time = 0
+)
+```
+
+```{r}
+# create a sequence
+time_values <- seq(0, 10) # days
+```
+
+```{r}
+sir_equations
+```
+
+```{r}
+parameters_values
+```
+
+```{r}
+initial_values
+```
+
+```{r}
+time_values
+```
+
+```{r}
+sir_values_1 <- ode(
+  y = initial_values,
+  times = time_values,
+  func = sir_equations,
+  parms = parameters_values 
+)
+```
+
+```{r}
+sir_values_1 <- as.data.frame(sir_values_1)
+sir_values_1
+```
+
+```{r}
+with(sir_values_1, {
+# plotting the time series of susceptibles:
+  plot(time, S, type = "l", col = "blue",
+       xlab = "time (days)", ylab = "number of people")
+# adding the time series of infectious:
+  lines(time, I, col = "red")
+# adding the time series of recovered:
+  lines(time, R, col = "green")
+})
+
+# adding a legend:
+legend("right", c("susceptibles", "infectious", "recovered"),
+       col = c("blue", "red", "green"), lty = 1, bty = "n")
+```
+
+```{r}
+R0 <- (999 + 1) * parameters_values["beta"] / parameters_values["gamma"]
+
+R0
+```
+
+```{r}
+sir_1 <- function(beta, gamma, S0, I0, R0, times) {
+  require(deSolve) # for the "ode" function
+  
+  # the differential equations:
+  sir_equations <- function(time, variables, parameters) {
+    with(as.list(c(variables, parameters)), {
+      dS <- -beta * I * S
+      dI <-  beta * I * S - gamma * I
+      dR <-  gamma * I
+      return(list(c(dS, dI, dR)))
+    })
+  }
+  
+  # the parameters values:
+  parameters_values <- c(beta  = beta, gamma = gamma)
+
+  # the initial values of variables:
+  initial_values <- c(S = S0, I = I0, R = R0)
+  
+  # solving
+  out <- ode(initial_values, times, sir_equations, parameters_values)
+
+  # returning the output:
+  as.data.frame(out)
+}
+```
+
+```{r}
+sir_1(beta = 0.004, gamma = 0.5, S0 = 999, I0 = 1, R0 = 0, times = seq(0, 10))
+```
+
+```{r}
+flu <- read.table("https://bit.ly/2vDqAYN", header = TRUE)
+
+flu
+```
+
+```{r}
+with(flu, plot(day, cases, pch = 19, col = "red", ylim = c(0, 600)))
+predictions <- sir_1(beta = 0.004, gamma = 0.5, S0 = 999, I0 = 1, R0 = 0, times = flu$day)
+with(predictions, lines(time, I, col = "red"))
+```
+
+```{r}
+model_fit <- function(beta, gamma, data, N = 763, ...) {
+  I0 <- data$cases[1] # initial number of infected (from data)
+  times <- data$day   # time points (from data)
+# model's predictions:
+  predictions <- sir_1(beta = beta, gamma = gamma,   # parameters
+                       S0 = N - I0, I0 = I0, R0 = 0, # variables' initial values
+                       times = times)                # time points
+# plotting the observed prevalences:
+  with(data, plot(day, cases, ...))
+# adding the model-predicted prevalence:
+  with(predictions, lines(time, I, col = "red"))
+}
+```
+
+```{r}
+model_fit(beta = 0.004, gamma = 0.5, flu, pch = 19, col = "red", ylim = c(0, 600))
+```
+
+```{r}
+predictions <- sir_1(beta = 0.004, gamma = 0.5, S0 = 999, I0 = 1, R0 = 0, times = flu$day)
+predictions
+```
+
+```{r}
+sum((predictions$I - flu$cases)^2)
+```
+
+```{r}
+ss <- function(beta, gamma, data = flu, N = 763) {
+  I0 <- data$cases[1]
+  times <- data$day
+  predictions <- sir_1(beta = beta, gamma = gamma,   # parameters
+                       S0 = N - I0, I0 = I0, R0 = 0, # variables' initial values
+                       times = times)                # time points
+  sum((predictions$I[-1] - data$cases[-1])^2)
+}
+```
+
+```{r}
+ss(beta = 0.004, gamma = 0.5)
+```
+
+```{r}
+n <- 30 # number of parameters values
+beta_val <- seq(from = 0.002, to = 0.0035, le = n)
+gamma_val <- seq(from = 0.3, to = 0.65, le = n)
+# calculating the sum of squares:
+param_val <- expand.grid(beta_val, gamma_val)
+ss_val <- with(param_val, Map(ss, Var1, Var2))
+ss_val <- unlist(ss_val)
+
+# minimum sum of squares and parameters values:
+(ss_min <- min(ss_val))
+```
+
+```{r}
+# estimate parameters
+ind <- ss_val == ss_min
+(beta_hat <- param_val$Var1[ind])
+(gamma_hat <- param_val$Var2[ind])
+```
+
+```{r}
+# visualizing the sum of squares profile:
+ss_val <- matrix(ss_val, n)
+image(beta_val, gamma_val, ss_val,
+      xlab = expression(paste("infectious contact rate ", beta, " (/person/day)")),
+      ylab = expression(paste("recovery rate ", gamma, " (/day)")))
+contour(beta_val, gamma_val,ss_val, add = TRUE)
+points(beta_hat, gamma_hat, pch = 3)
+box(bty = "o")
+```
+
+```{r}
+model_fit(beta = beta_hat, gamma = gamma_hat, flu, pch = 19, col = "red", ylim = c(0, 600))
+```
+
+## Monte Carlo simulation
+
+```{r}
+# num of MC samples
+niter = 1000
+
+# draw from normal distributions
+beta_sample <- rnorm(n=niter, mean=beta_hat, sd=beta_hat*0.1)
+gamma_sample <- rnorm(n=niter, mean=gamma_hat, sd=gamma_hat*0.1)
+```
+
+```{r}
+N = 763
+
+R0_sample <- 1:niter
+for (i in 1:niter) {
+  predictions <- sir_1(beta = beta_sample[i], gamma = gamma_sample[i], S0 = N - 1, I0 = 1, R0 = 0, times = flu$day)
+  R0_sample[i] = N * beta_sample[i] / gamma_sample[i]
+}
+```
+
+```{r}
+hist(R0_sample)
+```
+
+
+```{r}
+summary(R0_sample)
+```
+
+## Sensitive analysis
+
+```{r}
+mc_sample <- data.frame(beta = beta_sample, gamma = gamma_sample, R0 = R0_sample)
+mc_sample
+```
+
+```{r}
+plot(mc_sample)
+```
+
+```{r}
+cor(mc_sample)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+model error / discrepancy
