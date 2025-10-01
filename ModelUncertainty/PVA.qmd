@@ -25,6 +25,8 @@ $$
 
 ## Modeling
 
+### Simple
+
 ```{r}
 # parameters
 p = 0.5
@@ -54,6 +56,8 @@ plot(time, B, ylab = "biomass", type = "l", ylim = c(0,500))
 abline(h = qext, col = "darkred")
 ```
 
+### Multiple
+
 ```{r}
 # model multiple times
 niter = 100
@@ -81,8 +85,32 @@ quasi_extinction_risk = mean(below)
 quasi_extinction_risk
 ```
 
+### Robust
 
+```{r}
+calc_risk <- function() {
+  niter = 100
+  below = rep(0, niter) # counter of quasi-extinction
+  for (i in 1:niter) {
+    for (t in 1:GL) {
+      # equation of Biomass
+      B[t+1] <- B[t] * exp(p - delta * B[t] + rnorm(1, 0, sigma)) - C
+      B[t+1] = max(0, B[t+1])
+    }
+    below[i] = max(B < qext)
+  }
+  return (mean(below))
+}
+```
 
+```{r}
+robust_risk <- replicate(20, calc_risk())
+robust_risk
+```
+
+```{r}
+summary(robust_risk)
+```
 
 
 
