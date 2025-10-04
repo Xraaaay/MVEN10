@@ -2,7 +2,6 @@
 title: "PopulationViabilityAnalysis"
 author: "Ruowen Xiao"
 format: html
-editor: visual
 ---
 
 ## Introduction
@@ -19,13 +18,15 @@ $$
 -   π: intrinsic growth rate
 -   δ: density depends
 
-1. Extinction probability given value on π, δ, σ and $B_0$ and C
-2. Derive likelihood at extinction over 3 generations(quasi-extinction threshold)
-3. *Conclude the in probability
+1.  Extinction probability given value on π, δ, σ and $B_0$ and C
+2.  Derive likelihood at extinction over 3 generations(quasi-extinction threshold)
+3.  \*Conclude the in probability
 
 ## Modeling
 
-### Simple
+```{r}
+library("ggplot2")
+```
 
 ```{r}
 # parameters
@@ -39,11 +40,14 @@ C = 22
 GL = 30
 time = 0:GL
 qext = 10
-```
 
-```{r}
 B = rep(0, GL+1)
 B[1] = B0
+```
+
+### Simple
+
+```{r}
 for (t in 1:GL) {
   # equation of Biomass
   B[t+1] <- B[t] * exp(p - delta * B[t] + rnorm(1, 0, sigma)) - C
@@ -79,6 +83,7 @@ for (i in 1:niter) {
 abline(h = qext, col = "darkred")
 
 quasi_extinction_risk = mean(below)
+mtext(quasi_extinction_risk)
 ```
 
 ```{r}
@@ -88,13 +93,15 @@ quasi_extinction_risk
 ### Robust
 
 ```{r}
-calc_risk <- function() {
-  niter = 100
+niter = 100
+par <- data.frame(p = 0.5, delta = 0.002, sigma = 0.25)
+
+calc_risk <- function(par) {
   below = rep(0, niter) # counter of quasi-extinction
   for (i in 1:niter) {
     for (t in 1:GL) {
       # equation of Biomass
-      B[t+1] <- B[t] * exp(p - delta * B[t] + rnorm(1, 0, sigma)) - C
+      B[t+1] <- B[t] * exp(par$p - par$delta * B[t] + rnorm(1, 0, par$sigma)) - C
       B[t+1] = max(0, B[t+1])
     }
     below[i] = max(B < qext)
@@ -104,21 +111,75 @@ calc_risk <- function() {
 ```
 
 ```{r}
-robust_risk <- replicate(20, calc_risk())
-robust_risk
+niter_rep <- 20
+df_sim <- data.frame(ext_risk <- replicate(niter_rep, calc_risk(par)))
 ```
 
 ```{r}
-summary(robust_risk)
+summary(df_sim$ext_risk)
+```
+
+```{r}
+ggplot(df_sim, aes(y=ext_risk)) +
+         geom_boxplot()
+```
+
+### Monte Carlo Simulation
+
+```{r}
+# Uncertainty in parameters
+niter = 100
+par <- data.frame(p = 0.5, delta = 0.002, sigma = 0.25)
+
+calc_risk <- function(par) {
+  below = rep(0, niter) # counter of quasi-extinction
+  for (i in 1:niter) {
+    for (t in 1:GL) {
+      # equation of Biomass
+      B[t+1] <- B[t] * exp(par$p - par$delta * B[t] + rnorm(1, 0, par$sigma)) - C
+      B[t+1] = max(0, B[t+1])
+    }
+    below[i] = max(B < qext)
+  }
+  return (mean(below))
+}
+```
+
+```{r}
+niter_epi <- 1000
+
+df_par <- data.frame(p = rnorm(n = niter_epi, mean = 0.5, sd = 0.005),
+  delta = rnorm(n = niter_epi, mean = 0.002, sd = 0.0002),
+  sigma = rlnorm(n = niter_epi, mean = log(0.25), sd = 0.1), # log-normal distribution
+  iter =  1:niter_epi)
+```
+
+```{r}
+# calculate 
+ext_risk = rep(0, niter_epi)
+
+for (j in 1:niter_epi) {
+  ext_risk[j] = calc_risk(df_par[j,]) 
+}
+
+df_mc = data.frame(df_par, ext_risk=ext_risk)
+```
+
+```{r}
+ggplot(df_mc, aes(x=ext_risk)) +
+  # geom_histogram() +
+  geom_density() +
+  geom_vline(xintercept=quantile(df_mc$ext_risk, probs = 0.95), col = "#ed1b0c")
+```
+```{r}
+plot(df_mc)
+cor(df_mc)
 ```
 
 
-
-
-
-
-
-
+1) True, 7
+2) False, 5
+3) False, 6
 
 
 
