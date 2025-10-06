@@ -9,12 +9,12 @@ format: html
 Equation:
 
 $$
-B_t = B_{t-1} \cdot e^{π - δ \cdot B_{t-1} + S_t} - C_t
+B_t = B_{t-1} \cdot e^{\pi - \delta \cdot B_{t-1} + S_t} - C_t
 $$
 
 -   $B_t$: Biomass at time t
 -   $C_t$: Catch at time t
--   $S_t$: $S_t \sim N(0, σ)$ natural variability due to weather and climate
+-   $S_t$: $S_t \sim N(0, \sigma)$ natural variability due to weather and climate
 -   π: intrinsic growth rate
 -   δ: density depends
 
@@ -175,11 +175,6 @@ ggplot(df_mc, aes(x=ext_risk)) +
 plot(df_mc)
 cor(df_mc)
 ```
-
-
-1) True, 7
-2) False, 5
-3) False, 6
 
 
 

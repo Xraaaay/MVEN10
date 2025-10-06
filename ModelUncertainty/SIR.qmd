@@ -11,7 +11,7 @@ https://rpubs.com/choisy/sir
 𝑅: recovered
 
 $$
-S \xrightarrow{𝛽 \times𝐼} I \xrightarrow{𝛾} R
+S \xrightarrow{\beta \times𝐼} I \xrightarrow{\gamma} R
 $$
 
 > variable: number changing over time
