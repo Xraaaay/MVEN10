@@ -16,11 +16,17 @@ execute:
 
 ## 2. Methods
 
+t, ice, N_2015, N_t, B_i
+
+```{r}
+library(ggplot2)
+```
+
 ### 2.1. Generation Length
 
 > Modification: They propagate percentiles, but you are to use a probabilistic approach to take into account uncertainties in the assessment.
 
-`GL`: Generation Length(years)
+`GL`: Generation Length (years)
 
 Table 1. Mean `GL` estimates for 11 subpopulations(mean, lower 95% CI, upper 95% CI)
 
@@ -32,22 +38,29 @@ gl_lower = 9.8
 gl_upper = 13.6
 # gl_N = 3374
 
-sd = (gl_upper - gl_lower) / qnorm(0.975) / 2
-gl = rnorm(1000, gl_mean, sd)
+gl_sd = (gl_upper - gl_lower) / qnorm(0.975) / 2
 ```
 
 ```{r}
-hist(gl)
-```
+# Prepartion for the MC
+gl_samples <- function(niter) {
+  return(rnorm(niter, gl_mean, gl_sd))
+}
 
+hist(gl_samples(1000))
+```
 
 ### 2.2. Sea Ice
 
-> Modification: You are to consider resent projections on the Last Ice Area.
-> 
+> Modification: You are to consider recent projections on the Last Ice Area.
+>
 > [Last Ice Area](https://www.arcticwwf.org/our-priorities/last-ice-area/)
 
-`ice`: reduced-ice days(days/year)
+`ice`: reduced-ice days(days)
+
+`T`: the threshold area()
+
+The threshold area (denoted T) was chosen as the midpoint of these values:
 
 ### 2.3. Population Projections
 
@@ -69,8 +82,7 @@ $N_i$ is either the first or second available abundance estimate
 
 $N^1_i$ is the first available abundance estimate.
 
-The linear model for Approach 2 included an intercept for each subpopulation and a single, global 
-slope coefficient：
+The linear model for Approach 2 included an intercept for each subpopulation and a single, global slope coefficient：
 
 $$
 N^{norm} = \Sigma_i B_i + B_{Global} \cdot fitted.ice + \epsilon
@@ -88,26 +100,25 @@ $$
 \Delta G = 100 \times \frac{G_t - G_2015}{G2015}
 $$
 
+```{r}
+niter <- 62500
+
+df_par <- data.frame(gl = gl_samples(niter),
+                     iter = 1:niter)
+```
+
 ## 3. Results
 
 ## 4. Conclusions
 
 > Modification: You are also to assess uncertainty in the conclusion which could be different from the conclusion in the Red List Assessment.
 
+Overall uncertainty
+
 ## 5. Communication
 
-Discuss the importance of taking action to stop the decline in the Last Ice Area to protect polar bear. 
+Discuss the importance of taking action to stop the decline in the Last Ice Area to protect polar bear.
 
 Target audience is policy makers
 
 Communicate the conclusion, overall uncertainty and the path leading to the conclusion in your text.
-
-
-
-
-
-
-
-
-
-

@@ -1,0 +1,116 @@
+---
+title: "OverallUncertainty"
+format: html
+---
+
+# Fit distribution to data
+
+```{r}
+library(readxl)
+library(MASS)
+library(ggplot2)
+```
+
+```{r}
+ex_obs_all <- read_excel("data/ex_obs_all.xlsx", 
+                         sheet = "data")
+# View(ex_obs_all)
+
+num_cars <- ex_obs_all$num_cars[1:5]
+time_cars <- ex_obs_all$time_cars[1:40]
+length <- ex_obs_all$length[1:20]
+```
+
+## Discrete variable
+
+Poisson distribution
+
+```{r}
+fit1 <- fitdistr(num_cars, densfun = "Poisson")
+fit1
+fit1$loglik # higher loglik, better model
+```
+
+Negative binomial distribution
+
+```{r}
+fit2 <- fitdistr(num_cars, densfun = "negative binomial")
+fit2
+fit2$loglik
+```
+
+## Continuous variable
+
+Time between cars
+
+Exponential distribution
+
+```{r}
+fit3 <- fitdistr(time_cars, densfun = "exponential")
+fit3
+fit3$loglik
+```
+
+```{r}
+hist(time_cars, probability = T)
+
+xx = seq(0, 40, by = 0.01)
+yy = dexp(xx, fit3$estimate)
+lines(xx, yy, col = "darkred")
+```
+
+Log-normal distribution
+
+```{r}
+fit4 <- fitdistr(time_cars, densfun = "log-normal")
+fit4
+fit4$loglik
+```
+
+```{r}
+hist(time_cars, probability = T)
+
+xx = seq(0, 40, by = 0.01)
+yy = dlnorm(xx, fit4$estimate[1], fit4$estimate[2])
+lines(xx, yy, col = "darkred")
+```
+
+Length
+
+normal distribution
+
+```{r}
+fit5 <- fitdistr(length, densfun = "normal")
+fit5
+fit5$loglik
+```
+
+```{r}
+hist(length, probability = T)
+
+xx = seq(4.5, 5.5, by = 0.01)
+yy = dnorm(xx, fit5$estimate[1], fit5$estimate[2])
+lines(xx, yy, col = "darkred")
+```
+
+beta distribution
+
+```{r}
+fit6 <- fitdistr(length, densfun = "log-normal")
+fit6
+fit6$loglik
+```
+
+```{r}
+hist(length, probability = T)
+
+xx = seq(4.5, 5.5, by = 0.01)
+yy = dlnorm(xx, fit6$estimate[1], fit6$estimate[2])
+lines(xx, yy, col = "darkred")
+```
+
+
+
+
+
+
