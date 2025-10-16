@@ -3,7 +3,7 @@ title: "IUNC Red List Assessment: Polar Bear"
 subtitle: "Report"
 author: "Ruowen Xiao"
 date: 2025-10-04
-format: html
+format: pdf
 toc: true  # enable Table of Contents
 code-fold: true
 message: false
@@ -14,12 +14,16 @@ execute:
 
 ## 1. Introductions
 
+Polar Bears (Ursus maritimus) are facing a range of threats that might impact their future population status. This report reproduced the IUCN Red List Assessment of Polar Bears with some modifications, using a probabilistic approach to take into account uncertainties in the assessment.
+
+We assumed and estimated linear relationships between habitat availability and Polar Bear abundance. The approach to assess the category of Polar Bear is that estimating a global ice-abundance relationship using a reduced dataset that included a maximum of two abundance estimates for each subpopulation, and then used these relationships to predict future abundance of each subpopulation as a function of predicted sea-ice conditions. Under this approach, the 6 subpopulations with at least two estimates of abundance exerted similar influence on the ice-abundance relationship.
+
 ## 2. Methods
 
-t, ice, N_2015, N_t, B_i
-
 ```{r}
-library(ggplot2)
+library(ggplot2) # Plot
+library(readxl) # Read Excel
+library(dplyr)
 ```
 
 ### 2.1. Generation Length
@@ -28,26 +32,22 @@ library(ggplot2)
 
 `GL`: Generation Length (years)
 
-Table 1. Mean `GL` estimates for 11 subpopulations(mean, lower 95% CI, upper 95% CI)
-
-The mean of subpopulation mean estimates was 11.5 years (95% CI = 9.8, 13.6).
+The mean of subpopulation GL mean estimates was 11.5 years (95% CI = 9.8, 13.6).
 
 ```{r}
 gl_mean = 11.5
 gl_lower = 9.8
 gl_upper = 13.6
-# gl_N = 3374
 
-gl_sd = (gl_upper - gl_lower) / qnorm(0.975) / 2
+gl_times = 3
 ```
 
-```{r}
-# Prepartion for the MC
-gl_samples <- function(niter) {
-  return(rnorm(niter, gl_mean, gl_sd))
-}
+Mean generation length of 6 selected subpopulations:
 
-hist(gl_samples(1000))
+```{r}
+tbl_gl <- read_excel("data/Nnorm~fitted_ice.xlsx",
+                     sheet = "mean gl")
+tbl_gl[, c("Abbreviation", "Generation length(years)", "95% CI lower", "95% CI uppper")]
 ```
 
 ### 2.2. Sea Ice
@@ -56,17 +56,40 @@ hist(gl_samples(1000))
 >
 > [Last Ice Area](https://www.arcticwwf.org/our-priorities/last-ice-area/)
 
-`ice`: reduced-ice days(days)
+The sea-ice metric `ice`: the number of days per year (1979-2014) that sea-ice area exceeded the threshold `T`.
 
-`T`: the threshold area()
+$$
+ice = B_0 + B_{year} \times year + \epsilon
+$$
 
-The threshold area (denoted T) was chosen as the midpoint of these values:
+The threshold area (denoted `T`) was chosen as the midpoint of the mean September sea-ice area (denoted `Area_Sept`) and the mean March sea-ice area (denoted `Area_March`):
+
+$$
+T = Area\_Sept + 50\% \times (Area\_March - Area\_Sept)
+$$
+
+Ice slope of 6 selected subpopulations:
+
+```{r}
+tbl_ice <- read_excel("data/Nnorm~fitted_ice.xlsx", 
+                      sheet = "ice")
+tbl_ice[, c("Abbreviation", "Slope", "SE")]
+```
+
+
 
 ### 2.3. Population Projections
 
 #### 2.3.1. Abundance Estimates
 
-Table 3. Abundance(`N`) estimates for 19 subpopulations
+Abundance(`N`) estimates for 6 selected subpopulations:
+
+```{r}
+tbl_abundance <- read_excel("data/Nnorm~fitted_ice.xlsx", 
+                            sheet = "Abundance")
+tbl_abundance[, c("Abbreviation", "Year", "Estimate_Abundance")]
+```
+
 
 #### 2.3.2. Statistical Models and Computer Simulation
 
@@ -82,10 +105,20 @@ $N_i$ is either the first or second available abundance estimate
 
 $N^1_i$ is the first available abundance estimate.
 
+The table below is abundance(`N`) estimates added by a new column N_norm:
+
+```{r}
+tbl_abundance <- tbl_abundance %>%
+  group_by(Abbreviation) %>%
+  mutate(N_norm = Estimate_Abundance / first(Estimate_Abundance)) %>%
+  ungroup()
+tbl_abundance[, c("Abbreviation", "Year", "Estimate_Abundance", "N_norm")]
+```
+
 The linear model for Approach 2 included an intercept for each subpopulation and a single, global slope coefficient：
 
 $$
-N^{norm} = \Sigma_i B_i + B_{Global} \cdot fitted.ice + \epsilon
+N^{norm} = \Sigma_i B_i + B_{Global} \cdot fitted.ice + \Sigma_i \epsilon_i
 $$
 
 For each draw of starting abundance for subpopulation i, we predicted mean abundance in year t as:
@@ -97,28 +130,138 @@ $$
 Finally, we calculated percent change in mean global population size as:
 
 $$
-\Delta G = 100 \times \frac{G_t - G_2015}{G2015}
+\Delta G = 100 \times \frac{G_t - G_{2015}}{G_{2015}}
 $$
-
-```{r}
-niter <- 62500
-
-df_par <- data.frame(gl = gl_samples(niter),
-                     iter = 1:niter)
-```
 
 ## 3. Results
 
-## 4. Conclusions
-
 > Modification: You are also to assess uncertainty in the conclusion which could be different from the conclusion in the Red List Assessment.
 
-Overall uncertainty
+```{r}
+# assume that fitted ice in median year is 0 to minimize standard errors
+start_year <- 2015
+year_ref <- start_year + floor(gl_times * gl_mean / 2)
 
-## 5. Communication
+df_n_norm_ice <- merge(tbl_abundance, tbl_ice[, c("Abbreviation", "Slope")], by = "Abbreviation")
+df_n_norm_ice$fitted_ice <- df_n_norm_ice$Slope * (df_n_norm_ice$Year - year_ref)
+```
 
-Discuss the importance of taking action to stop the decline in the Last Ice Area to protect polar bear.
+```{r}
+# Linear Model
+model <- lm(N_norm ~ fitted_ice + factor(Abbreviation), data = df_n_norm_ice)
+summary_model <- summary(model)
+```
 
-Target audience is policy makers
+Here is a linear model using the mean gl and fixed value of ice slope and N_norm, and the global slope is `r round(coef(model)['fitted_ice'], 4)`:
 
-Communicate the conclusion, overall uncertainty and the path leading to the conclusion in your text.
+```{r}
+ggplot(df_n_norm_ice, aes(x = fitted_ice, y = N_norm, color = Abbreviation)) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
+  geom_abline(
+    intercept = coef(model)["(Intercept)"],
+    slope = coef(model)["fitted_ice"],
+    color = "black",
+    linetype = "dashed"
+  ) +
+  labs(
+    x = "Fitted ice (days)",
+    y = "N_norm",
+    title = "Subpopulation fits and global slope",
+  ) +
+  theme_minimal(base_size = 14)
+```
+```{r}
+cal_95_ci_sd <- function(lwr, uwr) {
+  sd <- (uwr - lwr) / qnorm(0.975) / 2
+  return(sd)
+}
+
+tbl_gl$sd <- cal_95_ci_sd(tbl_gl$`95% CI lower`, tbl_gl$`95% CI uppper`)
+tbl_abundance$sd <- cal_95_ci_sd(tbl_abundance$`95%_lwr_Abundance`, tbl_abundance$`95%_uwr_Abundance`)
+```
+
+```{r}
+set.seed(2015) # make the data reproducible
+
+# function: calculate global population rate of change
+cal_change_rate <- function() {
+  # GL (Normal Distribution)
+  tbl_gl$gl_draws <- pmax(0, rnorm(n = nrow(tbl_gl), mean = tbl_gl$`Generation length(years)`, sd = tbl_gl$sd))
+  
+  # ice slope (Normal Distribution)
+  tbl_ice$slope_draws <- rnorm(n = nrow(tbl_ice), mean = tbl_ice$Slope, sd = tbl_ice$SE)
+  
+  # N norm (Normal Distribution)
+  tbl_abundance$N_draws <- rnorm(n = nrow(tbl_abundance), mean = tbl_abundance$Estimate_Abundance, sd = tbl_abundance$sd)
+  # set lower bound of N to 10% of mean
+  tbl_abundance$N_draws <- pmax(tbl_abundance$N_draws, 0.1 * tbl_abundance$Estimate_Abundance)
+  tbl_abundance <- tbl_abundance %>%
+    arrange(Abbreviation, Year) %>%
+    group_by(Abbreviation) %>%
+    mutate(N_norm = N_draws / first(N_draws)) %>%
+    ungroup()
+  
+  # join tables
+  df_n_norm_ice <- tbl_abundance %>%
+  left_join(tbl_ice[, c("Abbreviation", "slope_draws")], by = "Abbreviation") %>%
+  left_join(tbl_gl[, c("Abbreviation", "gl_draws")], by = "Abbreviation")
+
+  # fitted ice
+  df_n_norm_ice$fitted_ice <- df_n_norm_ice$slope_draws * (df_n_norm_ice$Year - year_ref)
+  
+  # model
+  model <- lm(N_norm ~ fitted_ice + factor(Abbreviation), data = df_n_norm_ice)
+  
+  B_Global <- coef(model)["fitted_ice"]
+  
+  df_n_norm_ice$Delta_ice <- df_n_norm_ice$slope_draws * (gl_times * df_n_norm_ice$gl_draws)
+  df_n_norm_ice$Pred_Nnorm <- 1 + B_Global * df_n_norm_ice$Delta_ice
+  
+  # global abundance rate of change
+  global_N_pred <- sum(df_n_norm_ice$N_draws * df_n_norm_ice$Pred_Nnorm)
+  global_N_now <- sum(df_n_norm_ice$N_draws)
+  change_rate <- (global_N_pred - global_N_now) / global_N_now
+  
+  return(list(change_rate = change_rate, slope = round(coef(model)['fitted_ice'], 4)))
+}
+```
+
+```{r}
+niter <- 10000
+change_rates <- rep(0, niter)
+slopes <- rep(0, niter)
+
+for (i in 1:niter) {
+  results <- cal_change_rate()
+  change_rates[i] <- results$change_rate
+  slopes[i] <- results$slope
+}
+```
+
+We chose to use normal distribution to fit the generation length(GL), the ice slope(ice) and the abundance(N) of every subpopulation. By using Monte Carlo simulation, the global rates of change of Polar Bear population size was estimated. Below are a simple summary of change rates and a plot of density of change rates. The orange vertical line stands for that the decline rate of global population is at 30%, and the red line is at 50%.
+
+```{r}
+summary(change_rates)
+```
+
+```{r}
+mean <- mean(change_rates)
+mean_30 <- mean(change_rates < -0.3)
+mean_50 <- mean(change_rates < -0.5)
+
+q_97.5 <- quantile(change_rates, probs = 0.975)
+q_2.5 <- quantile(change_rates, probs = 0.025)
+```
+
+```{r}
+df_change_rates = data.frame(change_rates = change_rates)
+ggplot(df_change_rates, aes(x=change_rates)) +
+  # geom_histogram() +
+  geom_density() +
+  geom_vline(xintercept = -0.3, col = "orange") +
+  geom_vline(xintercept = -0.5, col = "red") +
+  xlim(-1, 10)
+```
+
+After three generations, this approach suggested a median percent change in mean global population size of `r round(mean, 4) * 100`% (95% CI = `r round(q_2.5, 4) * 100`%, `r round(q_97.5, 4) * 100`%). The corresponding probability of a decline greater than 30% was approximately `r round(mean_30, 4)`, and the probability of a decline greater than 50% was approximately `r round(mean_50, 4)`. We conclude that Polar Bears currently warrant listing as Vulnerable under criterion A3c.

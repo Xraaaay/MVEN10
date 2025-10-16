@@ -1,0 +1,303 @@
+---
+title: "Red List Assessment-Polar Bear"
+author: "Haoyang Qian"
+format: pdf
+editor: visual
+echo: false
+---
+
+## Introduction
+
+This is a red list assessment for polar bear, conducted by Haoyang Qian，Rouwen Xiao,Ullrika Sahlin.
+
+## Main assumptions
+
+All the subpopulations of polar bear response consistently to sea ice change.
+
+The relationship between sea ice change and population abundance is linear.
+
+The future change of sea ice will continue linear decline based on historical trends.
+
+##sea ice area，abundance of populations, time(years)
+
+Sea ice value refers to the days the sea ice area value is higher that the threschold T. $$T=AreaSept+50\%\times(AreaMarch-AreaSept)$$
+
+Based on the sea ice data between 1979-2014, calculate the daily sea ice area by subpopulation boundaties, then through the linear regression model.
+
+$$ice=B_{0}+B_{year}\times year+\epsilon$$
+
+Due to inaccessible sea ice data, the regression model can not be reproduced.
+
+$$N_i^{norm}=\frac{N_i}{N_i^s}$$
+
+Calculate fitted ice value(fitted.ice)for each abundance of subpopulation at the corresponding time points, then construct a linear model with$N_{norm}$and fitted.ice
+
+$$N_{norm}=B_{BB}+B_{BS}+B_{CS}+ ... +B_{WH}+B_{globle}\times fitted.ice$$
+
+## Technical procedure
+
+```{r}
+  #install.packages("DiagrammeR")
+library(DiagrammeR)
+```
+
+##Another method
+
+As mentioned before, the sea ice data is inaccessible, thus we came out a new method to carry on the assessment.
+
+Here we redefine the fitted.ice value
+
+$$fitted.ice_{i,t}=slope_{i}\times (t-t_{ref})$$ $t_{ref}$ is a reference point
+
+$$t_{ref}=2015+\frac{3\times GL}{2}$$
+
+Then we fit the $N_{norm}$ with $fitted.ice$ and derive the over all slope $B_{global}$ $$N_{norm} \sim fitted.ice + factor(subpop)$$
+
+Next step, we predict $N_{norm}$ in the target year(3 times generation length).
+
+$$\Delta N_{i norm} = B_{Global} \times (slope_i \times 3GL_i)$$
+
+In the end, the over all proportion change is calculated. $$Proportion\ change = \frac{\sum_i N_{i1}(1+\Delta N_{i norm}) - \sum_i N_{i1}}{\sum_i N_{i1}}$$
+
+##redifine fitted.ice
+
+```{r}
+
+#install.packages("readxl")
+library(readxl)
+```
+
+```{r}
+df_sheet2<-read_excel("PB_data.xlsx",sheet=2)
+colnames(df_sheet2)
+```
+
+```{r}
+GLa<-df_sheet2$GL_average
+GLu<-df_sheet2$GL_u
+GLl<-df_sheet2$GL_l
+
+```
+
+```{r}
+
+
+
+shapes <- numeric(length(GLa))
+scales <- numeric(length(GLa)) 
+
+for (i in 1:length(GLa)) {
+  CI_half_width <- (GLu[i] - GLl[i]) / 2
+  
+  SE <- CI_half_width / 1.96  
+  variance <- SE^2
+  
+  shapes[i] <- (GLa[i]^2) / variance
+  scales[i] <- variance / GLa[i]
+}
+
+inter<-100
+generated_data_list <- lapply(1:length(GLa), function(i) {
+  rgamma(inter, shape = shapes[i], scale = scales[i])  
+})
+
+par(mfrow = c(2, 3))  
+for (i in 1:length(GLa)) {
+  hist(generated_data_list[[i]], breaks = 30, col = "lightblue", 
+       main = paste("Gamma Distribution for Subpop", i),
+       xlab = paste("Generation Length (Mean =", GLa[i], ")", sep = ""))
+  
+}
+
+```
+
+Gamma distribution of the generation length to each subpopulations.
+
+```{r}
+Func_FINAL<-function(){
+  # GL
+  generate_GL_samples <- function(mean_value, CI_l, CI_u, n = 1000) {
+    CI_half_width <- (CI_u - CI_l) / 2
+    SE <- CI_half_width / 1.96  
+  
+    variance <- SE^2
+  
+    shape <- (mean_value^2) / variance
+    scale <- variance / mean_value
+  
+    return(rgamma(n, shape = shape, scale = scale))
+  }
+  
+  percentiles <- c(2.5, 50, 97.5) 
+  simulated_results <- list()
+  GL<-c()
+  for (i in 1:length(GLa)) {
+    simulated_data <- generate_GL_samples(GLa[i], GLl[i], GLu[i], 1)
+    GL[i] <- simulated_data
+    simulated_results[[i]] <- quantile(simulated_data, percentiles / 100)
+  }
+  simulated_data
+  simulated_results
+  
+  
+  tref_results <- list()
+  
+  for (i in 1:length(simulated_results)) {
+    tref_results[[i]] <- 2015 + 1.5 * simulated_results[[i]]
+  }
+  
+  tref_50 <- sapply(tref_results, `[`, 2)
+  
+  delta_t <- list() 
+  
+  for (i in 1:6) {
+    end_year <- 3 * GL[i]+2015
+    ceiling(end_year)
+    delta_t[[i]] <- seq(from = 1979, to = end_year, by = 1) - tref_50[i]
+  }
+  ceiling(delta_t[[i]])
+  
+  #slope
+  sl<-df_sheet2$Slope
+  slope_SE<-df_sheet2$SE
+  n<-100
+  fitted_ice <- list()
+  slope<-c()
+  for (i in 1:length(sl)) {
+    slope_samples <- rnorm(1, mean = sl[i], sd = slope_SE[i])
+    slope[i]<-slope_samples
+    
+    fitted_ice_samples <- slope_samples * delta_t[[i]]
+  
+    fitted_ice[[i]] <- fitted_ice_samples
+  }
+  
+  fitted_ice_percentiles <- list()
+  for (i in 1:length(fitted_ice)) {
+    fitted_ice_percentiles[[i]] <- quantile(fitted_ice[[i]], c(0.025, 0.5, 0.975))
+  }
+  
+  
+  N_sd<-df_sheet2$sd
+  N_a2<-df_sheet2$Na2
+  N_rand2<-list()
+  N_norm<-list()
+  N_a1<-df_sheet2$Na1
+  
+  
+  N_rand2 <- numeric(length(fitted_ice))
+  N_norm <- numeric(length(fitted_ice))
+  
+  
+  for (i in 1:length(delta_t)){
+    N_rand2[i]<-rnorm(1, mean = N_a2[i], sd = N_sd[i])
+    N_norm[i]<-N_rand2[i]/N_a1[i]
+  }
+  
+  N_ice_years<-c()
+  N_ice_years[1] <- fitted_ice[[1]][c(1)]
+  N_ice_years[2] <- fitted_ice[[2]][c(8)]
+  N_ice_years[3] <- fitted_ice[[3]][c(8)]
+  N_ice_years[4] <- fitted_ice[[4]][c(8)]
+  N_ice_years[5] <- fitted_ice[[5]][c(9)]
+  N_ice_years[6] <- fitted_ice[[6]][c(18)]
+  
+  for (i in 1:6){
+    model<-lm(( N_norm~N_ice_years))
+  }
+  B_global <- coef(model)[2]
+  
+  
+  delta_N<-c()
+  for (i in 1:6){
+  N_norm_delta<-B_global*slope[i]*3*GL[i]
+  delta_N[i]<-N_norm_delta
+  }
+  s_N<-sum(N_norm)
+  s_N_d<-sum((delta_N+1)*(N_norm))
+  PC<-(s_N_d-s_N)/s_N
+  
+  return(PC)
+}
+
+```
+
+```{r}
+n<-1000
+N<-c()
+for (i in 1 : n){
+  c<-Func_FINAL()
+  N[i]<-c
+}
+N <- N[N >= -1]
+```
+
+```{r}
+N <- N[N >= -1]
+library(ggplot2)
+df <- data.frame(values = N)
+ggplot(df, aes(x = values)) +
+geom_histogram(
+    aes(y = ..count.. / sum(..count..)), bins = 30,color = "grey", 
+  ) +
+  geom_vline(xintercept = -0.3, linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = -0.5, linetype = "dashed", linewidth = 1) +
+  geom_vline(xintercept = -0.8, linetype = "dashed", linewidth = 1) +
+annotate("text", x = -0.3, y = 0.02, label = "X = -0.3", color = "white") +
+  annotate("text", x = -0.5, y = 0.015, label = "X = -0.5", color = "blue") +
+  annotate("text", x = -0.8, y = 0.01, label = "X = -0.8", color = "red") +
+
+  labs(
+    title = "Probability distribution of sample data N",x = "N value",y = "Probability）"
+  ) +
+  theme_minimal()
+
+```
+
+```{r}
+q97.5 <- quantile(N, probs = 0.975)
+q2.5 <- quantile(N, probs = 0.025)
+# 打印结果
+cat("样本N的95%分位数：", q97.5,q2.5, "\n")
+```
+
+```{r}
+
+library(ggplot2)
+
+ggplot(data.frame(x = N), aes(x = x)) +
+  
+  stat_ecdf(geom = "line", color = "blue", linewidth = 1) + 
+  labs(
+    title = "cumulative distribution function",
+    x = "N value",
+    y = "cumulative probability (P(X ≤ x))"
+  ) +
+  geom_vline(xintercept=c(-0.8,-0.5,-0.3), 
+             color=c("red","blue","black"), 
+             linetype="dashed")+
+  ylim(0, 1) +
+  theme_minimal()
+```
+
+According to the result of the assessment, it is very unlikely that the polar bear become Critically Endangered and it is likely to be at least Vulnerable(VU) with more than 50% probability.
+
+```{r}
+cat("The 95% upper and lower bounds of the model are q97.5 =", q97.5, ", q2.5 =", q2.5, "\n")
+```
+
+It shows that the polar bear's population is extremely unlikely to grow if the conditions do not change.
+
+##Last Ice Area
+
+Based on the information from Last Ice Area, the sea ice area will decline in the future, which also Supports the sea ice - time relationship in the assessment
+
+##Uncertainties analysis
+
+Only the upper and lower bounds and mean value of the generation length are provided, (not finished)
+
+##Instructions for experts
+
+Due to incomplete data, this assessment calculates the change of sea ice and the normalized change of populations.
+
+The result is provided and based on Monte Carlo method.

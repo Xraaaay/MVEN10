@@ -1,0 +1,232 @@
+---
+title: "Model"
+format: html
+---
+
+## 1. Simple Modeling
+
+```{r}
+library(ggplot2) # Plot
+library(readxl) # Read Excel
+library(dplyr)
+```
+
+### GL
+
+```{r}
+gl_mean = 11.5
+gl_lower = 9.8
+gl_upper = 13.6
+gl_times = 3
+```
+
+```{r}
+tbl_gl <- read_excel("data/Nnorm~fitted_ice.xlsx",
+                 sheet = "mean gl")
+View(tbl_gl)
+```
+
+
+### Sea Ice
+
+```{r}
+tbl_ice <- read_excel("data/Nnorm~fitted_ice.xlsx", 
+                  sheet = "ice")
+View(tbl_ice)
+```
+
+### Abundance
+
+```{r}
+tbl_abundance <- read_excel("data/Nnorm~fitted_ice.xlsx", 
+    sheet = "Abundance")
+tbl_abundance <- tbl_abundance %>%
+  group_by(Abbreviation) %>%
+  mutate(N_norm = Estimate_Abundance / first(Estimate_Abundance)) %>%
+  ungroup()
+View(tbl_abundance)
+```
+
+### Model
+
+```{r}
+# assume that fitted ice in median year is 0 to minimize standard errors
+start_year <- 2015
+year_ref <- start_year + floor(gl_times * gl_mean / 2)
+
+df_n_norm_ice <- merge(tbl_abundance, tbl_ice[, c("Abbreviation", "Slope")], by = "Abbreviation")
+df_n_norm_ice$fitted_ice <- df_n_norm_ice$Slope * (df_n_norm_ice$Year - year_ref)
+```
+
+```{r}
+# Linear Model
+model <- lm(N_norm ~ fitted_ice + factor(Abbreviation), data = df_n_norm_ice)
+summary_model <- summary(model)
+summary_model
+```
+
+```{r}
+ggplot(df_n_norm_ice, aes(x = fitted_ice, y = N_norm, color = Abbreviation)) +
+  geom_point(size = 3, alpha = 0.8) +
+  geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
+  geom_abline(
+    intercept = coef(model)["(Intercept)"],
+    slope = coef(model)["fitted_ice"],
+    color = "black",
+    linetype = "dashed"
+  ) +
+  labs(
+    x = "Fitted ice (days)",
+    y = "N_norm",
+    title = expression("Subpopulation fits and global slope"~(B[Global])),
+    subtitle = paste0("Global slope = ", round(coef(model)['fitted_ice'], 4))
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+```{r}
+B_Global <- coef(model)["fitted_ice"]
+
+df_n_norm_ice$Delta_ice <- df_n_norm_ice$Slope * (gl_times * gl_mean)
+df_n_norm_ice$Pred_Nnorm <- 1 + B_Global * df_n_norm_ice$Delta_ice
+
+df_n_norm_ice[, c("Abbreviation", "Slope", "Pred_Nnorm")]
+```
+
+## 2. Uncertainty
+
+```{r}
+cal_95_ci_sd <- function(lwr, uwr) {
+  sd = (uwr - lwr) / qnorm(0.975) / 2
+  return(sd)
+}
+```
+
+```{r}
+# Generation Length
+gl_sd <- cal_95_ci_sd(tbl_gl$`95% CI lower`, tbl_gl$`95% CI uppper`)
+tbl_gl$gl_draws <- rnorm(n = nrow(tbl_gl), mean = tbl_gl$`Generation length(years)`, sd = gl_sd)
+```
+
+```{r}
+# Ice Slope
+tbl_ice$slope_draws <- rnorm(n = nrow(tbl_ice), mean = tbl_ice$Slope, sd = tbl_ice$SE)
+```
+
+```{r}
+# N norm
+abundance_sd <- cal_95_ci_sd(tbl_abundance$`95%_lwr_Abundance`, tbl_abundance$`95%_uwr_Abundance`)
+tbl_abundance$N_draws <- rnorm(n = nrow(tbl_abundance), mean = tbl_abundance$Estimate_Abundance, sd = abundance_sd)
+tbl_abundance <- tbl_abundance %>%
+  group_by(Abbreviation) %>%
+  mutate(N_norm = N_draws / first(N_draws)) %>%
+  ungroup()
+```
+
+```{r}
+df_n_norm_ice <- tbl_abundance %>%
+  left_join(tbl_ice[, c("Abbreviation", "slope_draws")], by = "Abbreviation") %>%
+  left_join(tbl_gl[, c("Abbreviation", "gl_draws")], by = "Abbreviation")
+
+df_n_norm_ice$fitted_ice <- df_n_norm_ice$slope_draws * (df_n_norm_ice$Year - year_ref)
+```
+
+```{r}
+model <- lm(N_norm ~ fitted_ice + factor(Abbreviation), data = df_n_norm_ice)
+```
+
+```{r}
+B_Global <- coef(model)["fitted_ice"]
+
+df_n_norm_ice$Delta_ice <- df_n_norm_ice$slope_draws * (gl_times * df_n_norm_ice$gl_draws)
+df_n_norm_ice$Pred_Nnorm <- 1 + B_Global * df_n_norm_ice$Delta_ice
+
+df_n_norm_ice[, c("Abbreviation", "slope_draws", "Pred_Nnorm")]
+```
+
+```{r}
+# change rate
+global_N_pred <- sum(df_n_norm_ice$N_draws * df_n_norm_ice$Pred_Nnorm)
+global_N_now <- sum(df_n_norm_ice$N_draws)
+change_rate <- (global_N_pred - global_N_now) / global_N_now
+change_rate
+```
+
+## 3. Monte Carlo Simulation
+
+```{r}
+# function: calculate global population rate of change
+cal_change_rate <- function() {
+  # GL
+  tbl_gl$gl_draws <- rnorm(n = nrow(tbl_gl), mean = tbl_gl$`Generation length(years)`, sd = gl_sd)
+  
+  # ice slope
+  tbl_ice$slope_draws <- rnorm(n = nrow(tbl_ice), mean = tbl_ice$Slope, sd = tbl_ice$SE)
+  
+  # N norm
+  abundance_sd <- cal_95_ci_sd(tbl_abundance$`95%_lwr_Abundance`, tbl_abundance$`95%_uwr_Abundance`)
+  tbl_abundance$N_draws <- rnorm(n = nrow(tbl_abundance), mean = tbl_abundance$Estimate_Abundance, sd = abundance_sd)
+  tbl_abundance$N_draws[tbl_abundance$N_draws < 0] <- 0
+  tbl_abundance <- tbl_abundance %>%
+    group_by(Abbreviation) %>%
+    mutate(N_norm = N_draws / first(N_draws)) %>%
+    ungroup()
+  
+  # fitted ice
+  df_n_norm_ice <- tbl_abundance %>%
+  left_join(tbl_ice[, c("Abbreviation", "slope_draws")], by = "Abbreviation") %>%
+  left_join(tbl_gl[, c("Abbreviation", "gl_draws")], by = "Abbreviation")
+
+  df_n_norm_ice$fitted_ice <- df_n_norm_ice$slope_draws * (df_n_norm_ice$Year - year_ref)
+  
+  # model
+  model <- lm(N_norm ~ fitted_ice + factor(Abbreviation), data = df_n_norm_ice)
+  
+  B_Global <- coef(model)["fitted_ice"]
+  
+  df_n_norm_ice$Delta_ice <- df_n_norm_ice$slope_draws * (gl_times * df_n_norm_ice$gl_draws)
+  df_n_norm_ice$Pred_Nnorm <- 1 + B_Global * df_n_norm_ice$Delta_ice
+  
+  # global abundance rate of change
+  global_N_pred <- sum(df_n_norm_ice$N_draws * df_n_norm_ice$Pred_Nnorm)
+  global_N_now <- sum(df_n_norm_ice$N_draws)
+  change_rate <- (global_N_pred - global_N_now) / global_N_now
+  
+  return(change_rate)
+}
+```
+
+```{r}
+niter <- 10000
+change_rates <- rep(0, niter)
+
+for (i in 1:niter) {
+  change_rates[i] <- cal_change_rate()
+}
+```
+
+```{r}
+summary(change_rates)
+```
+
+```{r}
+mean(change_rates < -0.3)
+mean(change_rates < -0.5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
